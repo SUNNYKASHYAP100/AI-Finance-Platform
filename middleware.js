@@ -1,37 +1,53 @@
+import arcjet, { createMiddleware, detectBot, shield } from "@arcjet/next";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
+const isProtectedRoute = createRouteMatcher([
+  "/dashboard(.*)",
+  "/account(.*)",
+  "/transaction(.*)",
+]);
 
+// Create ArcJet middleware
+const aj = arcjet({
+  key: process.env.ARCJET_KEY,
+  // characteristics: ["userId"], // Track based on Clerk userId
+  rules: [
+    // Shield protection for content and security
+    shield({
+      mode: "LIVE",
+    }),
+    detectBot({
+      mode: "LIVE", // Use "DRY_RUN" to log only
+      allow: [
+        "CATEGORY:SEARCH_ENGINE", // Google, Bing, etc
+        "GO_HTTP", // For Inngest
+        // See full list: https://arcjet.com/bot-list
+      ],
+    }),
+  ],
+});
 
-export function middleware(req) {
-  const pathname = req.nextUrl.pathname;
+// Create base Clerk middleware
+const clerk = clerkMiddleware(async (auth, req) => {
+  const { userId } = await auth();
 
-  // Protected routes
-  const protectedRoutes = [
-    "/dashboard",
-    "/account",
-    "/transaction",
-  ];
-
-  const isProtected = protectedRoutes.some((route) =>
-    pathname.startsWith(route)
-  );
-
-  // Clerk session cookie (safe check)
-  const hasSession =
-    req.cookies.get("__session") ||
-    req.cookies.get("__clerk_session");
-
-  if (isProtected && !hasSession) {
-    return NextResponse.redirect(new URL("/sign-in", req.url));
+  if (!userId && isProtectedRoute(req)) {
+    const { redirectToSignIn } = await auth();
+    return redirectToSignIn();
   }
 
   return NextResponse.next();
-}
+});
+
+// Chain middlewares - ArcJet runs first, then Clerk
+export default createMiddleware(aj, clerk);
 
 export const config = {
   matcher: [
-    "/dashboard/:path*",
-    "/account/:path*",
-    "/transaction/:path*",
+    // Skip Next.js internals and static files
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // Always run for API routes
+    "/(api|trpc)(.*)",
   ],
 };
