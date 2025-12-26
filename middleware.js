@@ -1,43 +1,26 @@
-import arcjet, { createMiddleware, detectBot, shield } from "@arcjet/next";
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-const isProtectedRoute = createRouteMatcher([
-  "/dashboard(.*)",
-  "/account(.*)",
-  "/transaction(.*)",
-]);
+// Lightweight middleware: check for presence of cookies on protected routes and redirect
+// unauthenticated requests to `/sign-in`. This avoids importing Clerk or Arcjet in the Edge
+// middleware to keep the Edge Function bundle small.
+const protectedRegex = /^\/(dashboard|account|transaction)(\/|$)/;
 
-const aj = arcjet({
-  key: process.env.ARCJET_KEY,
+export function middleware(req) {
+  const { pathname } = req.nextUrl;
 
-  rules: [
+  if (protectedRegex.test(pathname)) {
+    const cookieHeader = req.headers.get("cookie") || "";
 
-    shield({
-      mode: "LIVE",
-    }),
-    detectBot({
-      mode: "LIVE",
-      allow: [
-        "CATEGORY:SEARCH_ENGINE", 
-        "GO_HTTP", 
-      ],
-    }),
-  ],
-});
-
-const clerk = clerkMiddleware(async (auth, req) => {
-  const { userId } = await auth();
-
-  if (!userId && isProtectedRoute(req)) {
-    const { redirectToSignIn } = await auth();
-    return redirectToSignIn();
+    // If no cookies present, treat as unauthenticated and redirect to sign-in
+    if (!cookieHeader) {
+      const signInUrl = new URL("/sign-in", req.url);
+      return NextResponse.redirect(signInUrl);
+    }
   }
 
   return NextResponse.next();
-});
+}
 
-export default createMiddleware(aj, clerk);
 export const config = {
   matcher: [
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
