@@ -8,7 +8,7 @@ const isProtectedRoute = createRouteMatcher([
   "/transaction(.*)",
 ]);
 
-// Create ArcJet middleware
+// Create Arcjet middleware
 const aj = arcjet({
   key: process.env.ARCJET_KEY,
   // characteristics: ["userId"], // Track based on Clerk userId
@@ -18,11 +18,11 @@ const aj = arcjet({
       mode: "LIVE",
     }),
     detectBot({
-      mode: "LIVE", // Use "DRY_RUN" to log only
+      mode: "LIVE", // will block requests. Use "DRY_RUN" to log only
       allow: [
         "CATEGORY:SEARCH_ENGINE", // Google, Bing, etc
         "GO_HTTP", // For Inngest
-        // See full list: https://arcjet.com/bot-list
+        // See the full list at https://arcjet.com/bot-list
       ],
     }),
   ],
@@ -45,7 +45,7 @@ export default createMiddleware(aj, clerk);
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and static files
+    // Skip Next.js internals and all static files, unless found in search params
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     // Always run for API routes
     "/(api|trpc)(.*)",
